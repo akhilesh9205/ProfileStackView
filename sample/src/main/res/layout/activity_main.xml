@@ -7,8 +7,15 @@
     tools:context="com.codefromlab.sample.MainActivity">
 
     <com.codefromlab.profilestackview.StackView
+        android:id="@+id/stack_view"
         android:layout_width="match_parent"
         android:background="#90f2b9"
         android:layout_height="340dp" />
+    <Button
+        android:layout_below="@+id/stack_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:onClick="showItem"
+        android:text="showItem"/>
 
 </RelativeLayout>

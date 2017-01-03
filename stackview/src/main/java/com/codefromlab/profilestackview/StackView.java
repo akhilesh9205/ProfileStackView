@@ -12,6 +12,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.Animation;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -25,7 +26,7 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
 
     public static final String TAG = StackView.class.getSimpleName();
 
-    private static final float SECTION_COUNT = 6.0f;
+    private static final float SECTION_COUNT = 10.0f;
     private static final int INVALID_POINTER_ID = -1;
     private static final long DURATION_FAST = 100;
     private static final long DURATION_SLOW = 200;
@@ -57,6 +58,7 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
     private float mPosX;
     private float mPosY;
     private boolean isAnimationRunning;
+    private int mTextViewSize;
 
     public interface StackItemSwipeListener {
 
@@ -101,6 +103,7 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
         mRightTextView.setAlpha(0.0f);
         mTopTextView.setAlpha(0.0f);
         mBottomTextView.setAlpha(0.0f);
+        mTextViewSize = getContext().getResources().getDimensionPixelSize(R.dimen.back_view_min_size);
 
         mImageView.setOnTouchListener(this);
     }
@@ -118,6 +121,7 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
         switch (MotionEventCompat.getActionMasked(event)) {
 
             case MotionEvent.ACTION_DOWN: {
+                mImageView.clearAnimation();
                 mActivePointerId = event.getPointerId(0);
 
                 mDownTouchX = event.getX(mActivePointerId);
@@ -133,7 +137,7 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
             case MotionEvent.ACTION_POINTER_DOWN:
                 break;
 
-            case MotionEvent.ACTION_MOVE:{
+            case MotionEvent.ACTION_MOVE: {
                 // Find the index of the active pointer and fetch its position
                 final int pointerIndexMove = event.findPointerIndex(mActivePointerId);
                 final float xMove = event.getX(pointerIndexMove);
@@ -151,19 +155,18 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
 
                 mImageView.setX(mPosX);
                 mImageView.setY(mPosY);
-                resetStackItem();
-                updateAlphaOfBadges(mPosX, mPosY);
+                updateAlphaOfBadges();
                 break;
             }
 
-            case MotionEvent.ACTION_UP:{
+            case MotionEvent.ACTION_UP: {
                 mActivePointerId = INVALID_POINTER_ID;
-
+                resetStackItem();
                 view.getParent().requestDisallowInterceptTouchEvent(false);
                 break;
             }
 
-            case MotionEvent.ACTION_POINTER_UP:{
+            case MotionEvent.ACTION_POINTER_UP: {
                 // Extract the index of the pointer that left the touch sensor
                 final int pointerIndex = (event.getAction() &
                         MotionEvent.ACTION_POINTER_INDEX_MASK) >> MotionEvent.ACTION_POINTER_INDEX_SHIFT;
@@ -190,22 +193,23 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
 
     private void resetStackItem() {
         if (hasCrossedLeftBoundary()) {
-            animateAndExit(ExitStatus.LEFT,-mParentWidth,0, DURATION_FAST);
+            animateAndExit(ExitStatus.LEFT, -mParentWidth, mPosY, DURATION_FAST);
         } else if (hasCrossedRightBoundary()) {
-            animateAndExit(ExitStatus.RIGHT,mParentWidth,0, DURATION_FAST);
+            animateAndExit(ExitStatus.RIGHT, mParentWidth, mPosY, DURATION_FAST);
         } else if (hasCrossedTopBoundary()) {
-            animateAndExit(ExitStatus.TOP,0,-mParentHeight, DURATION_FAST);
+            animateAndExit(ExitStatus.TOP, mPosX, -mParentHeight, DURATION_FAST);
         } else if (hasCrossedBottomBoundary()) {
-            animateAndExit(ExitStatus.BOTTOM, 0, mParentHeight, DURATION_FAST);
-        }else{
-            animateAndExit(ExitStatus.RESET,mItemX,mItemY,DURATION_SLOW);
+            animateAndExit(ExitStatus.BOTTOM, mPosX, mParentHeight, DURATION_FAST);
+        } else {
+            animateAndExit(ExitStatus.RESET, mItemX, mItemY, DURATION_SLOW);
         }
     }
 
-    private void animateAndExit(final ExitStatus exitStatus,float exitX,float exitY,long duration) {
+
+    private void animateAndExit(final ExitStatus exitStatus, float exitX, float exitY, long duration) {
         isAnimationRunning = true;
 
-        Animator.AnimatorListener listener=new AnimatorListenerAdapter() {
+        Animator.AnimatorListener listener = new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
                 super.onAnimationEnd(animation);
@@ -216,21 +220,25 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
                         if (mStackItemSwipeListener != null) {
                             mStackItemSwipeListener.onSwipeLeft();
                         }
+                        mImageView.setVisibility(View.INVISIBLE);
                         break;
                     case RIGHT:
                         if (mStackItemSwipeListener != null) {
                             mStackItemSwipeListener.onSwipeRight();
                         }
+                        mImageView.setVisibility(View.INVISIBLE);
                         break;
                     case TOP:
                         if (mStackItemSwipeListener != null) {
                             mStackItemSwipeListener.onSwipeTop();
                         }
+                        mImageView.setVisibility(View.INVISIBLE);
                         break;
                     case BOTTOM:
                         if (mStackItemSwipeListener != null) {
-                            mStackItemSwipeListener.onSwipeTop();
+                            mStackItemSwipeListener.onSwipeBottom();
                         }
+                        mImageView.setVisibility(View.INVISIBLE);
                         break;
                     case RESET: {
 
@@ -241,13 +249,15 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
         };
 
         if (exitStatus != ExitStatus.RESET) {
+            mImageView.clearAnimation();
             mImageView.animate()
                     .setDuration(duration)
                     .setInterpolator(new AccelerateInterpolator())
                     .x(exitX)
                     .y(exitY)
                     .setListener(listener);
-        }else{
+        } else {
+            mImageView.clearAnimation();
             mImageView.animate()
                     .setDuration(duration)
                     .setInterpolator(new OvershootInterpolator(1.5f))
@@ -259,9 +269,6 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
 
     }
 
-    private void animateAndReset() {
-
-    }
 
     private void startTrackingTouch() {
         if (!touchEventStarted) {
@@ -278,7 +285,7 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
             mLeftBoundary = mParentWidth * (1 / SECTION_COUNT);
             mRightBoundary = mParentWidth * ((SECTION_COUNT - 1) / SECTION_COUNT);
             mTopBoundary = mParentHeight * (1 / SECTION_COUNT);
-            mBottomBoundary = mParentHeight * (SECTION_COUNT - 1 / SECTION_COUNT);
+            mBottomBoundary = mParentHeight * ((SECTION_COUNT - 1) / SECTION_COUNT);
         }
 
     }
@@ -286,13 +293,6 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
     private void stopTrackingTouch() {
         if (touchEventStarted) {
             touchEventStarted = false;
-            mImageView.setX(mItemX);
-            mImageView.setY(mItemY);
-
-            mLeftBoundary = 0.0f;
-            mRightBoundary = 0.0f;
-            mTopBoundary = 0.0f;
-            mBottomBoundary = 0.0f;
 
             mPosX = 0;
             mPosY = 0;
@@ -300,41 +300,71 @@ public class StackView extends FrameLayout implements View.OnTouchListener {
             mDownTouchY = 0;
             mDownTouchX = 0;
 
+
             mLeftTextView.setAlpha(0.0f);
             mRightTextView.setAlpha(0.0f);
             mTopTextView.setAlpha(0.0f);
             mBottomTextView.setAlpha(0.0f);
+
+        }
+    }
+
+    public void setNewItem() {
+        mImageView.setVisibility(View.VISIBLE);
+        mImageView.setX(mItemX);
+        mImageView.setY(mItemY);
+    }
+
+
+    private void updateAlphaOfBadges() {
+        float dx = mPosX - mItemX;
+        float dy = mPosY - mItemY;
+
+        float disX = Math.abs(dx);
+        float disY = Math.abs(dy);
+
+        float alphaH = dx / (mItemHalfWidth);
+
+        float alphaV = dy / (mItemHalfHeight);
+
+        if (disX > disY) {
+            mTopTextView.setAlpha(0.0f);
+            mBottomTextView.setAlpha(0.0f);
+            mLeftTextView.setAlpha(alphaH);
+            mRightTextView.setAlpha(-alphaH);
+        } else {
+            mLeftTextView.setAlpha(0.0f);
+            mRightTextView.setAlpha(0.0f);
+
+            mTopTextView.setAlpha(alphaV);
+            mBottomTextView.setAlpha(-alphaV);
+
         }
 
-    }
 
-    private void updateAlphaOfBadges(float posX,float posY) {
-        float alphaH = posX / (mParentWidth * 0.50f);
-        float alphaV = posX / (mParentHeight * 0.50f);
-
-        mLeftTextView.setAlpha(alphaH);
-        mRightTextView.setAlpha(alphaH);
-        mTopTextView.setAlpha(alphaV);
-        mBottomTextView.setAlpha(alphaV);
+//
+//        mLeftTextView.setAlpha(alphaH);
+//        mRightTextView.setAlpha(alphaH);
+//        mTopTextView.setAlpha(alphaV);
+//        mBottomTextView.setAlpha(alphaV);
 
     }
-
 
 
     private boolean hasCrossedLeftBoundary() {
-        return (mImageView.getX() + mItemHalfWidth) + (mItemWidth / 2) < mLeftBoundary;
+        return (mPosX + (mItemHalfWidth / 2)) < mLeftBoundary;
     }
 
     private boolean hasCrossedRightBoundary() {
-        return (mImageView.getX() + mItemHalfWidth) + (mItemWidth / 2) > mRightBoundary;
+        return (mPosX + (mItemWidth * (3.0 / 4.0))) > mRightBoundary;
     }
 
     private boolean hasCrossedTopBoundary() {
-        return (mImageView.getY() + mItemHalfHeight) + (mItemHeight / 2) < mTopBoundary;
+        return (mPosY + (mItemHalfHeight / 2)) < mTopBoundary;
     }
 
     private boolean hasCrossedBottomBoundary() {
-        return (mImageView.getY() + mItemHalfHeight) + (mItemHeight / 2) > mBottomBoundary;
+        return (mPosY + (mItemHeight * (3.0 / 4.0))) > mBottomBoundary;
 
     }
 
